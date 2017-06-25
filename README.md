@@ -64,6 +64,50 @@ Raspberry Pi/Intel Edison -> Bluetooth -> Pebble watch
   openaps use pbl send_urchin_data urchin-data.json
   ```
 
+Here is a hacked together script Matt Pressnall (Matt writing here) put together that works on his Pi and should hopefully make reporting easier.  Some of this specific to my rig and I'm leaving on a huge trip tomorrow so excuse the hacking / I know folks were anxious for the info.
+
+update-pebble.sh
+````
+#!/bin/bash
+cd /home/pi/multiloop
+# I needed to strip these "-07:00"s from my data
+sed 's/-07:00//g' /home/pi/multiloop/cgm/cgm-glucose.json > /home/pi/multiloop/cgm/localized-cgm-glucose.json
+# thinking about getting it to work in not offline mode...commented out but saving for later
+#sed 's/sysTime/display_time/g' /home/pi/multiloop/cgm/gluose.json | sed 's/-0700//g' | sed 's/-07:00//g' > /home/pi/multiloop/cgm/localized-cgm-glucose.json
+# relying on the openaps pebble device to be there (from the openaps setup script)
+openaps report invoke upload/pebble.json
+# need to change the "content" of the pebble.json file to a "message"
+# you might also need to shorten the "message" data...I noticed if it got really long
+# it wouldn't work...had to shorten it.  Also, I wanted to customize the report so 
+# I actually hacked /usr/local/lib/node_modules/oref0/bin/oref0-pebble.js but you should
+# be able to get things to work with sed (below) to strip things if needed
+sed 's/content/message/g' /home/pi/multiloop/upload/pebble.json > /home/pi/multiloop/urchin-status.json
+# get clock time from CGM
+openaps report invoke monitor/dex-clock.json
+# format all the data into one nice json file
+openaps report invoke urchin-data.json
+# and actually send it to the watch
+openaps use pbl send_urchin_data urchin-data.json
+````
+This will run once a minute but if you do something on your pebble, you'll lose the data until another send so I have this one too.
+pebble-watchface-update.sh
+````
+#!/bin/bash
+while true
+do
+	cd /home/pi/multiloop
+	openaps use pbl send_urchin_data urchin-data.json >/dev/null 2>&1
+	sleep 5
+done
+````
+And then in your crontab:
+````
+* * * * * /bin/bash /home/pi/multiloop/scripts/update-pebble.sh
+@reboot /bin/bash /home/pi/multiloop/scripts/pebble-watchface-update.sh
+````
+EOM - End of Matt commenting
+
+
   ![](http://i.imgur.com/n5dcNj1.jpg)
 
 See `openaps use pbl format_urchin_data --help` for more options.
